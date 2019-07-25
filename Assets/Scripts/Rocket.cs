@@ -1,7 +1,5 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class Rocket : MonoBehaviour
 {
@@ -10,6 +8,17 @@ public class Rocket : MonoBehaviour
 
     [SerializeField] float rcsThrust = 1f;
     [SerializeField] float mainThrust = 1f;
+
+    [SerializeField] AudioClip mainEngineSound;
+    [SerializeField] AudioClip deathSound;
+    [SerializeField] AudioClip levelCompleteSound;
+
+    [SerializeField] ParticleSystem mainEngineParticles;
+    [SerializeField] ParticleSystem deathParticles;
+    [SerializeField] ParticleSystem levelCompleteParticles;
+
+    enum State { Alive, Dying, Transcending}
+    State state = State.Alive;
     void Start()
     {
         rigidBody = GetComponent<Rigidbody>();
@@ -18,33 +27,12 @@ public class Rocket : MonoBehaviour
 
     void Update()
     {
-        Thrust();
-        Rotate();
-    }
+        if (state == State.Dying || state == State.Transcending) { return; }
 
-    void OnCollisionEnter(Collision collision)
-    {
-        switch (collision.gameObject.tag)
+        if (state == State.Alive)
         {
-            case "Friendly":
-                print("nothing");
-                break;
-            case "Fuel":
-                print("fuel");
-                break;
-            default:
-                print("dead");
-                break;
-        }
-    }
-    private void Thrust()
-    {
-        float thrustThisFrame = mainThrust;
-        if (Input.GetKey(KeyCode.Space))
-        {
-            rigidBody.AddRelativeForce(Vector3.up * thrustThisFrame);
-            if (!audioSource.isPlaying)
-                audioSource.Play();
+            RespondToThrustInput();
+            RespondToRotateInput();
         }
         else
         {
@@ -52,20 +40,88 @@ public class Rocket : MonoBehaviour
         }
     }
 
-    private void Rotate()
+    void OnCollisionEnter(Collision collision)
     {
-        rigidBody.freezeRotation = true;
-        float rotationThisFrame = rcsThrust * Time.deltaTime;
+        if (state != State.Alive) return;
 
-        if (Input.GetKey(KeyCode.A))
-        {   
-            transform.Rotate(Vector3.forward * rotationThisFrame);
-        }
-        else if (Input.GetKey(KeyCode.D))
+        switch (collision.gameObject.tag)
         {
-            transform.Rotate(-Vector3.forward * rotationThisFrame);
+            case "Friendly":
+                break;
+            case "Finish":
+                StartFinishSequence();
+                break;
+            default:
+                StartDeathSequence();
+                break;
         }
+    }
 
-        rigidBody.freezeRotation = false;
+    private void StartDeathSequence()
+    {
+        state = State.Dying;
+        audioSource.Stop();
+        audioSource.PlayOneShot(deathSound);
+        deathParticles.Play();
+        Invoke("Restart", 1.8f);
+    }
+
+    private void StartFinishSequence()
+    {
+        state = State.Transcending;
+        audioSource.Stop();
+        audioSource.PlayOneShot(levelCompleteSound);
+        levelCompleteParticles.Play();
+        Invoke("LoadNextScene", 1.8f);
+    }
+
+    private void Restart()
+    {
+        state = State.Alive;
+        SceneManager.LoadScene(0);
+    }
+
+    private void LoadNextScene()
+    {
+        state = State.Alive;
+        SceneManager.LoadScene(1);
+    }
+
+    private void RespondToThrustInput()
+    {
+        if (Input.GetKey(KeyCode.Space)) ApplyThrust();
+        else
+        {
+            audioSource.Stop();
+            mainEngineParticles.Stop();
+        } 
+    }
+
+    private void ApplyThrust()
+    {      
+        rigidBody.AddRelativeForce(Vector3.up * mainThrust);
+
+        if (!audioSource.isPlaying)
+        {
+            audioSource.PlayOneShot(mainEngineSound);
+            mainEngineParticles.Play();
+        }       
+    }
+
+    private void RespondToRotateInput()
+    {
+            rigidBody.freezeRotation = true;
+            float rotationThisFrame = rcsThrust * Time.deltaTime;
+
+            if (Input.GetKey(KeyCode.A))
+            {
+                transform.Rotate(Vector3.forward * rotationThisFrame);
+            }
+            else if (Input.GetKey(KeyCode.D))
+            {
+                transform.Rotate(-Vector3.forward * rotationThisFrame);
+            }
+
+            rigidBody.freezeRotation = false;      
     }
 }
